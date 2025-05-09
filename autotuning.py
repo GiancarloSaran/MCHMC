@@ -2,6 +2,7 @@ import torch
 import numpy as np  
 
 from utils import checkpoint, warning
+import utils
 import MCHMC
 
 def tune_eps(d, N, L, fn, iterations=10, debug=True):
@@ -13,7 +14,7 @@ def tune_eps(d, N, L, fn, iterations=10, debug=True):
     #get it lower than a threshold
     checkpoint(f"\nRunning multiple iterations of MCHMC_bounces with {N} steps, updating epsilon")
     for i in range(iterations):
-        X, E, *_ = MCHMC_bounces(d, N, L, epsilon, fn, debug=debug)
+        X, E, *_ = MCHMC.MCHMC_bounces(d, N, L, epsilon, fn, debug=debug)
         varE = E.var()
         #checkpoint(f"varE: {varE}")
         epsilon *= (0.0005 * d / varE)**(1/4)
