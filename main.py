@@ -24,10 +24,9 @@ L_init = 10
 N_prerun_eps = 100
 iterations_eps = 10
 N_prerun_L = 100
-eps= aut.tune_eps(d, N_prerun_eps, L_init, funct.standard_cauchy, iterations=iterations_eps, debug=debug)
+eps, sigma_eff = aut.tune_eps(d, N_prerun_eps, L_init, funct.standard_cauchy, iterations=iterations_eps, debug=debug)
 epsilon_opt = eps[-1]
 
-sigma_eff = aut.s_eff(X)
 L_opt = aut.tune_L(d, sigma_eff, epsilon_opt, N_prerun_L, funct.standard_cauchy, debug)
 
 K = int(L_opt//epsilon_opt) #  steps between bounces

@@ -5,6 +5,9 @@ from utils import checkpoint, warning
 import utils
 import MCHMC
 
+def s_eff(X):
+  return np.sqrt((X**2).var(axis=0).mean())
+
 def tune_eps(d, N, L, fn, iterations=10, debug=True):
     checkpoint("Tuning epsilon..", debug=debug)
     epsilon = 0.5 # initial value
@@ -22,10 +25,9 @@ def tune_eps(d, N, L, fn, iterations=10, debug=True):
         eps_values[i]=epsilon
     checkpoint(f"\tOptimized epsilon: {epsilon}")
 
-    return eps_values
-
-def s_eff(X):
-  return np.sqrt((X**2).var(axis=0).mean())
+    sigma_ef = s_eff(X) #computed on the last iteration positions
+    
+    return eps_values, sigma_ef
 
 def tune_L(d, sigma_ef, epsilon_optimized, N_prerun, fn, debug=False):
     checkpoint("\nTuning L..", debug=debug)
