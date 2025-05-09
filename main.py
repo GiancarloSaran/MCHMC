@@ -21,7 +21,7 @@ L_init = 10
 N_prerun_eps = 100
 iterations_eps = 10
 N_prerun_L = 100
-eps, X, E = aut.tune_eps(d, N_prerun_eps, L_init, funct.standard_cauchy, iterations=iterations_eps, debug=debug)
+eps= aut.tune_eps(d, N_prerun_eps, L_init, funct.standard_cauchy, iterations=iterations_eps, debug=debug)
 epsilon_opt = eps[-1]
 
 sigma_eff = aut.s_eff(X)
