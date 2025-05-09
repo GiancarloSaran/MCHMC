@@ -12,6 +12,9 @@ import visualization as vis
 
 debug = True
 
+print("Cuda is available?", torch.cuda.is_available())
+print("Device in using: ", torch.cuda.get_device_name(0))
+
 # ALGORITHM PARAMETERS
 d = 1000  # dimension of the problem
 N = 10000 # number of steps
