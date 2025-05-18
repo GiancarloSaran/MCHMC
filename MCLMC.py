@@ -1,17 +1,37 @@
 import torch
 import numpy as np
-
+from tqdm import tqdm
 import utils
 from utils import checkpoint, warning
 import integration_schemes as integ
+import functions as funct
 
 
-def MCLMC(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, debug=False):
+def MCLMC(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, metrics=False, debug=False):
+    """
+    This function implements the MCLMC algorithm for the q=0 case.
+    Args:
+        d: dimension of the problem
+        N: number of steps
+        L: distance between momentum refreshment
+        epsilon: step size
+        fn: function to sample from
+        int_scheme: either leapfrog or minimal_norm
+        metrics: if True returns the ESS and b_squared metrics 
+    Output:
+        X: positions during evolution
+        E: energies during evolution
+        ESS: effective sample sizes during evolution
+        b_squared: values useful for one figure of the paper
+    """
 
     device = utils.choose_device()
 
     X = torch.zeros((N+1, d), device=device)
-    E = torch.zeros(N+1)
+    E = torch.zeros(N+1, device=device)
+
+    if metrics:
+        B_squared = torch.zeros(N+1, device=device)
 
     # STEP 0: Intial conditions
     x = np.random.uniform(low=-2, high=2, size=(d,)) # Sample initial position x_o in R^d from prior
@@ -24,34 +44,33 @@ def MCLMC(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, debug=False):
     w = 1 # Set the intial weight
     w = torch.tensor(w, requires_grad=False, dtype=torch.float32, device=device)
 
-    checkpoint(f"Step {0} (initialization):", debug)
-    checkpoint(f"\tx = {x}\n\tu = {u}\n\tw = {w}", debug)
-
-
     X[0] = x.detach()
     E[0] = utils.energy(x, w, d, fn)
-    ESS = utils.effective_sample_size(X, d, cauchy=True, debug=debug)
+
+    if fn == funct.standard_cauchy:
+        cauchy=True
+    
+    if metrics:
+        ESS, b_squared = utils.effective_sample_size(X, d, cauchy=cauchy)
+        B_squared[0] = b_squared
 
 
     # EVOLUTION: Algorithm implementation
-    for n in range(1,N+1):
-
-        checkpoint(f"Step {n+1}:", debug)
+    for n in tqdm(range(1,N+1)):
 
         # Updating coordinate and momentum
         x, u, w = int_scheme(x, u, w, epsilon, d, fn)
         x, u, w = integ.stochastic_update_map(x, u, w, epsilon, L, d, fn)
 
-        '''
-        if d<10:
-            checkpoint(f"\tx = {x}\n\tu = {u}\n\tw = {w}", debug)
-        if not np.isclose(np.linalg.norm(u), 1.0, atol=1e-4):
-            sys.exit(f"Vector u should be normalized, while its norm is {np.linalg.norm(u)}.")
-        '''
-
         # Storing results
         X[n] = x.detach()
         E[n] = utils.energy(x, w,d, fn)
-        ESS = utils.effective_sample_size(X, d, cauchy=True, debug=debug)
-
-    return X.cpu(), E.cpu(), ESS.cpu()
+        
+        if metrics:
+            ESS, b_squared = utils.effective_sample_size(X, d, cauchy=cauchy, debug=debug) #compute it after determining the new points in phase space
+            B_squared[n] = b_squared
+            
+    if metrics:
+        return X.cpu(), E.cpu(), ESS.cpu(), B_squared.cpu()
+    else:
+        return X.cpu(), E.cpu()

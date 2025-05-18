@@ -4,7 +4,6 @@ import torch
 import utils
 from utils import checkpoint, warning
 
-
 def grad_log_likelihood(x, fn):
     """
     This function takes an array of d-dimensional points as input
@@ -29,18 +28,13 @@ def grad_log_likelihood(x, fn):
 
     return nablaL
 
-
 def position_update_map(x: np.ndarray, u: np.ndarray, w: float, epsilon: float) -> tuple:
-
     new_x = x + epsilon * u
     new_u = u
     new_w = w
-
     return new_x, new_u, new_w
 
-
 def momentum_update_map(x: np.ndarray, u: np.ndarray, w: float, epsilon: float, d: int, fn) -> tuple:
-
     nablaL = grad_log_likelihood(x, fn) # computing the gradient of the loglikelihood of the pdf fn
     delta = epsilon * torch.linalg.norm(nablaL) / d
     e = - nablaL / torch.linalg.norm(nablaL)
@@ -57,11 +51,10 @@ def momentum_update_map(x: np.ndarray, u: np.ndarray, w: float, epsilon: float, 
 
     # updating weight
     new_w = w * (c + prod * s)
-
     return new_x, new_u, new_w
 
-def stochastic_update_map(x: np.ndarray, u: np.ndarray, w: float, epsilon: float, L, d: int, fn) -> tuple:
-    nu = np.sqrt((np.e**(2*epsilon/L)-1)/d)
+def stochastic_update_map(x, u, w, epsilon, L, d, fn):
+    nu = torch.sqrt((np.e**(2*epsilon/L))-1)/d
 
     # updating position
     new_x = x

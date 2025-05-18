@@ -1,46 +1,58 @@
 import torch
 import numpy as np  
-
 from utils import checkpoint, warning
 import utils
 import MCHMC
+import MCLMC
 
-def s_eff(X):
-  return np.sqrt((X**2).var(axis=0).mean())
-
-def tune_eps(d, N, L, fn, iterations=10, debug=True):
-    checkpoint("Tuning epsilon..", debug=debug)
-    epsilon = 0.5 # initial value
+def tune_eps(d, N, L, fn, algorithm, iterations=10, debug=True):
 
     eps_values = torch.zeros(iterations)
+    sigma_effs = torch.zeros(iterations)
+    
     #Change to an "until convergence" criterion, could track ((eps_i+1 - eps_i)/eps_i)^2 and 
     #get it lower than a threshold
-    checkpoint(f"\nRunning multiple iterations of MCHMC_bounces with {N} steps, updating epsilon")
-    for i in range(iterations):
-        X, E, *_ = MCHMC.MCHMC_bounces(d, N, L, epsilon, fn, debug=debug)
-        varE = E.var()
-        #checkpoint(f"varE: {varE}")
-        epsilon *= (0.0005 * d / varE)**(1/4)
-        checkpoint(f"Iteration {i} epsilon: {epsilon}")
-        eps_values[i]=epsilon
-    checkpoint(f"\tOptimized epsilon: {epsilon}")
-
-    sigma_ef = s_eff(X) #computed on the last iteration positions
     
-    return eps_values, sigma_ef
+    checkpoint(f"\nRunning {iterations} iterations of {algorithm} with {N} steps, updating epsilon")
+    
+    for i in range(iterations):
 
-def tune_L(d, sigma_ef, epsilon_optimized, N_prerun, fn, debug=False):
-    checkpoint("\nTuning L..", debug=debug)
-    #initial value
-    L_init = sigma_ef * np.sqrt(d)
+        epsilon = 0.5 # initial value
 
-    # Run for n steps to estimate the effective sample size for each dimension
-    X, *_ = MCHMC.MCHMC_bounces(d, N_prerun, L_init, epsilon_optimized, fn, debug=False)
+        if algorithm == MCHMC.MCHMC_bounces:
+            X, E = MCHMC.MCHMC_bounces(d, N, L, epsilon, fn)
+        else:
+            X, E = MCLMC.MCLMC(d, N, L, epsilon, fn)
+            
+        varE = E.var()
+        epsilon *= (0.0005 * d / varE)**(1/4)
+        
+        eps_values[i]=epsilon
 
-    n_eff_values = utils.effective_sample_size(X, d, cauchy=True, autotune_mode=True)
+        sigma_eff = torch.sqrt((X**2).var(axis=0).mean())
+        sigma_effs[i] = sigma_eff
+    
+    return eps_values, sigma_effs
 
-    # Computing the dechoerence scale L
-    L = 0.4 * epsilon_optimized * d * N_prerun / (torch.sum(n_eff_values))
-    checkpoint(f"\tOptimized L: {L}")
 
-    return L
+def tune_L(sigma_eff, eps_opt, d, N, fn, algorithm, iterations=10, debug=False, cauchy=False):
+
+    L_values = torch.zeros(iterations)
+    checkpoint(f"\nRunning {iterations} iterations of {algorithm} with {N} steps, updating L")
+
+    for i in range(iterations):
+        
+        L_init = sigma_eff * np.sqrt(d)
+        
+        if algorithm == MCHMC.MCHMC_bounces:
+          X, *_ = MCHMC.MCHMC_bounces(d, N, L_init, eps_opt, fn, debug=False)
+        else:
+          X, *_ = MCLMC.MCLMC(d, N, L_init, eps_opt, fn, debug=False)
+    
+        n_eff_values = utils.effective_sample_size(X, d, cauchy=cauchy, L_tuning=True)
+    
+        # Computing the dechoerence scale L
+        L = 0.4 * eps_opt * d * N / (torch.sum(n_eff_values))
+        L_values[i] = L
+          
+    return L_values

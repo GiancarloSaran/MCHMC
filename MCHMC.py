@@ -1,4 +1,3 @@
-#hellooooo
 import torch
 import numpy as np
 import time
@@ -6,13 +5,13 @@ from datetime import datetime
 import pytz
 from tqdm import tqdm
 import sys
-
 import utils
 from utils import checkpoint, warning
 import integration_schemes as integ
+import functions as funct
 
 
-def MCHMC_bounces(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, debug=False):
+def MCHMC_bounces(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, metrics=False, debug=False):
     """
     This function implements the MCHMC algorithm for the q=0 case with random momentum
     bounces every K steps.
@@ -22,6 +21,8 @@ def MCHMC_bounces(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, debug=False):
         L: distance between momentum bounces
         epsilon: step size
         fn: function to sample from
+        int_scheme: either leapfrog or minimal_norm
+        metrics: if True returns the ESS and b_squared metrics 
     Output:
         X: positions during evolution
         E: energies during evolution
@@ -31,18 +32,21 @@ def MCHMC_bounces(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, debug=False):
     """
     device = utils.choose_device()
 
-    #safety check
-    #if epsilon > L:
-    #    sys.exit(f"Epsilon passed: {epsilon}  BUT should be smaller than the length between bounces L: {L}")
     K = int(L // epsilon) #  steps between bounces
+
+    # idea da discutere
+    if K==0:
+        K=1
 
     # Defining tensors where to store results of evolution
     X = torch.zeros((N+1, d), device=device)
-    E = torch.zeros(N+1)
-    B_squared = torch.zeros(N+1)
+    E = torch.zeros(N+1, device=device)
+    
+    if metrics:
+        B_squared = torch.zeros(N+1)
 
     # STEP 0: Intial conditions
-    x = np.random.uniform(low=-2, high=2, size=(d,)) # Sample initial position x_o in R^d from prior
+    x = np.random.uniform(low=-10, high=10, size=(d,)) # Sample initial position x_o in R^d from prior
     x = torch.tensor(x, dtype=torch.float32, device=device)
     x.requires_grad_()
 
@@ -52,22 +56,18 @@ def MCHMC_bounces(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, debug=False):
     w = 1 # Set the intial weight
     w = torch.tensor(w, requires_grad=False, dtype=torch.float32, device=device)
 
-    checkpoint(f"Step {0} (initialization):", debug)
-    #checkpoint(f"\tx = {x}\n\tu = {u}\n\tw = {w}", debug)
-
     X[0] = x.detach()
     E[0] = utils.energy(x, w, d, fn)
-    ESS, b_squared = utils.effective_sample_size(X, d, cauchy=True, debug=debug)
-    B_squared[0] = b_squared
 
-    #if d < 100:
-    #    warning(f"For the validity of ESS results d should be very large but I am using d={d}")
-    #warning("Check that X has not been flatten")
+    if fn == funct.standard_cauchy:
+        cauchy=True
+    
+    if metrics:
+        ESS, b_squared = utils.effective_sample_size(X, d, cauchy=cauchy)
+        B_squared[0] = b_squared
 
     # EVOLUTION: Algorithm implementation
     for n in tqdm(range(1,N+1)):
-
-        #checkpoint(f"Step {n}:", debug)
 
         # if K steps have been done, apply a bounce
         if n % K == 0:
@@ -76,17 +76,16 @@ def MCHMC_bounces(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, debug=False):
 
         # Updating coordinate and momentum
         x, u, w = int_scheme(x, u, w, epsilon, d, fn)
-        #checkpoint(f"\tx = {x}\n\tu = {u}\n\tw = {w}", debug)
-
-        '''
-        if not np.isclose(np.linalg.norm(u), 1.0, atol=1e-4):
-            sys.exit(f"Vector u should be normalized, while its norm is {np.linalg.norm(u)}.")
-        '''
 
         # Storing results
         X[n] = x.detach()
         E[n] = utils.energy(x, w, d, fn)
-        ESS, b_squared = utils.effective_sample_size(X, d, cauchy=True, debug=debug) #compute it after determine the new points in phase space
-        B_squared[n] = b_squared
-
-    return X.cpu(), E.cpu(), ESS.cpu(), B_squared.cpu()
+        
+        if metrics:
+            ESS, b_squared = utils.effective_sample_size(X, d, cauchy=cauchy, debug=debug) #compute it after determining the new points in phase space
+            B_squared[n] = b_squared
+            
+    if metrics:
+        return X.cpu(), E.cpu(), ESS.cpu(), B_squared.cpu()
+    else:
+        return X.cpu(), E.cpu()
