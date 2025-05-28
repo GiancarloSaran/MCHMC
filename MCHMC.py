@@ -11,7 +11,7 @@ import integration_schemes as integ
 import functions as funct
 
 
-def MCHMC_bounces(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, metrics=False, debug=False):
+def MCHMC_bounces(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, metrics=False, debug=False, pbar=False):
     """
     This function implements the MCHMC algorithm for the q=0 case with random momentum
     bounces every K steps.
@@ -46,7 +46,13 @@ def MCHMC_bounces(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, metrics=False
         B_squared = torch.zeros(N+1)
 
     # STEP 0: Intial conditions
-    x = np.random.uniform(low=-10, high=10, size=(d,)) # Sample initial position x_o in R^d from prior
+    if fn == funct.bimodal:    
+        mu = np.zeros(d)
+        mu[0] = np.random.choice(np.array([0,8]))
+        x = np.random.normal(loc=mu, scale=1, size=(d, ))
+    else:
+        x = np.random.uniform(low=-10, high=10, size=(d,)) # Sample initial position x_o in R^d from prior
+        
     x = torch.tensor(x, dtype=torch.float32, device=device)
     x.requires_grad_()
 
@@ -67,7 +73,12 @@ def MCHMC_bounces(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, metrics=False
         B_squared[0] = b_squared
 
     # EVOLUTION: Algorithm implementation
-    for n in tqdm(range(1,N+1)):
+    if pbar:
+        bar = tqdm(range(1,N+1))
+    else:
+        bar = range(1,N+1)
+    
+    for n in bar:
 
         # if K steps have been done, apply a bounce
         if n % K == 0:

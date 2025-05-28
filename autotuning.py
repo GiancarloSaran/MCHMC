@@ -4,55 +4,112 @@ from utils import checkpoint, warning
 import utils
 import MCHMC
 import MCLMC
+from blackjax.diagnostics import effective_sample_size
+import blackjax
+import jax
+from tqdm import tqdm 
 
-def tune_eps(d, N, L, fn, algorithm, iterations=10, debug=True):
-
-    eps_values = torch.zeros(iterations)
-    sigma_effs = torch.zeros(iterations)
+def sigma_eff(d, N, L, fn, algorithm, debug=False):
+    epsilon = 0.5 # initial value
     
-    #Change to an "until convergence" criterion, could track ((eps_i+1 - eps_i)/eps_i)^2 and 
-    #get it lower than a threshold
+    if algorithm == MCHMC.MCHMC_bounces:
+        X, E = MCHMC.MCHMC_bounces(d, N, L, epsilon, fn, debug=debug)
+    else:
+        X, E = MCLMC.MCLMC(d, N, L, epsilon, fn, debug=debug)
+
+    sigma_eff = torch.sqrt((X**2).var(axis=0).mean())
+
+    return sigma_eff
+
+
+def tune_eps(d, N, L, fn, algorithm, iterations=10, debug=False):
+
+    eps_values = np.zeros(iterations)
+    #sigma_effs = np.zeros(iterations)
+    target = np.zeros(iterations)
     
     checkpoint(f"\nRunning {iterations} iterations of {algorithm} with {N} steps, updating epsilon")
+
+    epsilon = 0.5 # initial value
     
-    for i in range(iterations):
-
-        epsilon = 0.5 # initial value
-
+    for i in tqdm(range(iterations), desc="Running iterations"):
+        
         if algorithm == MCHMC.MCHMC_bounces:
-            X, E = MCHMC.MCHMC_bounces(d, N, L, epsilon, fn)
+            X, E = MCHMC.MCHMC_bounces(d, N, L, epsilon, fn, debug=debug)
         else:
-            X, E = MCLMC.MCLMC(d, N, L, epsilon, fn)
+            X, E = MCLMC.MCLMC(d, N, L, epsilon, fn, debug=debug)
             
         varE = E.var()
         epsilon *= (0.0005 * d / varE)**(1/4)
         
-        eps_values[i]=epsilon
+        eps_values[i] = epsilon
 
-        sigma_eff = torch.sqrt((X**2).var(axis=0).mean())
-        sigma_effs[i] = sigma_eff
+        #sigma_eff = torch.sqrt((X**2).var(axis=0).mean())
+        #sigma_effs[i] = sigma_eff
+        target[i] = varE / d
     
-    return eps_values, sigma_effs
+    #return eps_values, sigma_effs, target
+    return eps_values, target
 
 
 def tune_L(sigma_eff, eps_opt, d, N, fn, algorithm, iterations=10, debug=False, cauchy=False):
 
-    L_values = torch.zeros(iterations)
+    L_values = np.zeros(iterations)
     checkpoint(f"\nRunning {iterations} iterations of {algorithm} with {N} steps, updating L")
 
-    for i in range(iterations):
-        
-        L_init = sigma_eff * np.sqrt(d)
-        
+    for i in tqdm(range(iterations), desc="Running iterations"):   
+        L = sigma_eff * np.sqrt(d)
         if algorithm == MCHMC.MCHMC_bounces:
-          X, *_ = MCHMC.MCHMC_bounces(d, N, L_init, eps_opt, fn, debug=False)
+          X, *_ = MCHMC.MCHMC_bounces(d, N, L, eps_opt, fn, debug=debug)
         else:
-          X, *_ = MCLMC.MCLMC(d, N, L_init, eps_opt, fn, debug=False)
+          X, *_ = MCLMC.MCLMC(d, N, L, eps_opt, fn, debug=debug)
     
-        n_eff_values = utils.effective_sample_size(X, d, cauchy=cauchy, L_tuning=True)
-    
+        #n_eff_values = utils.effective_sample_size(X, d, cauchy=cauchy, L_tuning=True)
+        
+        #Using the library
+        Xt = np.expand_dims(X, 0) #(chain_axis, sample_axis, dim_axis)
+        n_eff_values = np.array(effective_sample_size(Xt))   
         # Computing the dechoerence scale L
-        L = 0.4 * eps_opt * d * N / (torch.sum(n_eff_values))
+        L = 0.4 * eps_opt * d * N / (n_eff_values.sum())
         L_values[i] = L
           
     return L_values
+
+
+def blackjax_tuner(logdensity_fn, initial_position, key, desired_energy_variance= 5e-4, num_steps=350):
+    """
+    Tune (epsilon, L) using the autotuner from the Google blackjax package, for consistency checks.
+    Inputs:
+    - 
+    Outputs:
+    - 
+    """
+    init_key, tune_key, run_key = jax.random.split(key, 3)
+
+    # create an initial state for the sampler
+    initial_state = blackjax.mcmc.mclmc.init(
+        position=initial_position, logdensity_fn=logdensity_fn, rng_key=init_key
+    )
+
+    # build the kernel
+    kernel = lambda inverse_mass_matrix : blackjax.mcmc.mclmc.build_kernel(
+        logdensity_fn=logdensity_fn,
+        integrator=blackjax.mcmc.integrators.isokinetic_mclachlan,
+        inverse_mass_matrix=inverse_mass_matrix,
+    )
+
+    # find values for L and step_size
+    (
+        _,
+        blackjax_mclmc_sampler_params,
+        _
+    ) = blackjax.mclmc_find_L_and_step_size(
+        mclmc_kernel=kernel,
+        num_steps=num_steps,
+        state=initial_state,
+        rng_key=tune_key,
+        diagonal_preconditioning=False,
+        desired_energy_var=desired_energy_variance
+    )
+
+    return blackjax_mclmc_sampler_params

@@ -3,6 +3,9 @@ import numpy as np
 from torch.distributions.multivariate_normal import MultivariateNormal
 from utils import checkpoint, warning
 import utils
+import jax
+import jax.numpy as jnp
+from jax.scipy.stats import multivariate_normal
 
 def standard_cauchy(x):
     """
@@ -21,7 +24,7 @@ def standard_cauchy(x):
         x = x.unsqueeze(1)
     return torch.prod(1 / (np.pi * (1 + x**2)), axis=1)
 
-def bimodal(x):
+def bimodal(x, w1=0.8, sep=8):
     '''
     This function takes an array of d-dimensional points as input
         x = [x_1, x_2, ..., x_d]
@@ -42,10 +45,27 @@ def bimodal(x):
     x = x.to(device)
     d = x.shape[1]
     mu1 = torch.zeros(d, device=device)
-    mu2 = torch.full((d,), 8.0 / (d ** 0.5), device=device) # they are separated by 8 sigma in the d-dimensional space 
-
+    mu2 = torch.zeros(d, device=device) 
+    mu2[0] = sep
     pdf1 = MultivariateNormal(mu1, torch.eye(d, device=device)).log_prob(x).exp()
     pdf2 = MultivariateNormal(mu2, torch.eye(d, device=device)).log_prob(x).exp()
-    pdf = 0.8*pdf1 + 0.2*pdf2
+    pdf = w1*pdf1 + (1-w1)*pdf2
 
+    return pdf
+
+def jax_bimodal(x, w1=0.8, off=8):
+    x = jnp.asarray(x, dtype=jnp.float32)
+    if x.ndim == 1:
+        x = x[None, :]
+    
+    d = x.shape[1]
+    
+    mu1 = jnp.zeros(d)
+    mu2 = jnp.zeros(d).at[0].set(off)
+    cov = jnp.eye(d)
+    
+    pdf1 = multivariate_normal.pdf(x, mu1, cov)
+    pdf2 = multivariate_normal.pdf(x, mu2, cov)
+    
+    pdf = w1 * pdf1 + (1 - w1) * pdf2
     return pdf
