@@ -34,7 +34,12 @@ def MCLMC(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, metrics=False, debug=
         B_squared = torch.zeros(N+1, device=device)
 
     # STEP 0: Intial conditions
-    x = np.random.uniform(low=-2, high=2, size=(d,)) # Sample initial position x_o in R^d from prior
+    if fn == funct.bimodal:    
+        mu = np.zeros(d)
+        mu[0] = np.random.choice(np.array([0,8]))
+        x = np.random.normal(loc=mu, scale=1, size=(d, ))
+    else:
+        x = np.random.uniform(low=-10, high=10, size=(d,)) # Sample initial position x_o in R^d from prior
     x = torch.tensor(x, dtype=torch.float32, device=device)
     x.requires_grad_()
 

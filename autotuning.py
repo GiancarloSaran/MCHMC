@@ -18,7 +18,6 @@ def sigma_eff(d, N, L, fn, algorithm, debug=False):
         X, E = MCLMC.MCLMC(d, N, L, epsilon, fn, debug=debug)
 
     sigma_eff = torch.sqrt((X**2).var(axis=0).mean())
-
     return sigma_eff
 
 
@@ -63,12 +62,11 @@ def tune_L(sigma_eff, eps_opt, d, N, fn, algorithm, iterations=10, debug=False, 
           X, *_ = MCHMC.MCHMC_bounces(d, N, L, eps_opt, fn, debug=debug)
         else:
           X, *_ = MCLMC.MCLMC(d, N, L, eps_opt, fn, debug=debug)
-    
-        #n_eff_values = utils.effective_sample_size(X, d, cauchy=cauchy, L_tuning=True)
         
         #Using the library
         Xt = np.expand_dims(X, 0) #(chain_axis, sample_axis, dim_axis)
-        n_eff_values = np.array(effective_sample_size(Xt))   
+        n_eff_values = np.array(effective_sample_size(Xt)) 
+        
         # Computing the dechoerence scale L
         L = 0.4 * eps_opt * d * N / (n_eff_values.sum())
         L_values[i] = L
