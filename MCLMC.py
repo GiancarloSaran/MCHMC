@@ -7,7 +7,7 @@ import integration_schemes as integ
 import functions as funct
 
 
-def MCLMC(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, metrics=False, debug=False):
+def MCLMC(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, metrics=False, debug=False, **kwargs):
     """
     This function implements the MCLMC algorithm for the q=0 case.
     Args:
@@ -39,7 +39,8 @@ def MCLMC(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, metrics=False, debug=
         mu[0] = np.random.choice(np.array([0,8]))
         x = np.random.normal(loc=mu, scale=1, size=(d, ))
     else:
-        x = np.random.uniform(low=-10, high=10, size=(d,)) # Sample initial position x_o in R^d from prior
+        x = np.random.uniform(low=-5, high=5, size=(d,)) # Sample initial position x_o in R^d from prior
+        
     x = torch.tensor(x, dtype=torch.float32, device=device)
     x.requires_grad_()
 
@@ -50,7 +51,7 @@ def MCLMC(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, metrics=False, debug=
     w = torch.tensor(w, requires_grad=False, dtype=torch.float32, device=device)
 
     X[0] = x.detach()
-    E[0] = utils.energy(x, w, d, fn)
+    E[0] = utils.energy(x, w, d, fn, **kwargs)
 
     if fn == funct.standard_cauchy:
         cauchy=True
@@ -64,12 +65,12 @@ def MCLMC(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, metrics=False, debug=
     for n in tqdm(range(1,N+1)):
 
         # Updating coordinate and momentum
-        x, u, w = int_scheme(x, u, w, epsilon, d, fn)
-        x, u, w = integ.stochastic_update_map(x, u, w, epsilon, L, d, fn)
+        x, u, w = int_scheme(x, u, w, epsilon, d, fn, **kwargs)
+        x, u, w = integ.stochastic_update_map(x, u, w, epsilon, L, d, fn, **kwargs)
 
         # Storing results
         X[n] = x.detach()
-        E[n] = utils.energy(x, w,d, fn)
+        E[n] = utils.energy(x, w,d, fn, **kwargs)
         
         if metrics:
             ESS, b_squared = utils.effective_sample_size(X, d, cauchy=cauchy, debug=debug) #compute it after determining the new points in phase space

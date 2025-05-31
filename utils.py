@@ -21,8 +21,9 @@ def choose_device():
   return device
 
 
-def energy(x, w, d, fn):
-    L = -torch.log(fn(x)).sum() # Negative log posterior
+def energy(x, w, d, fn, **kwargs):
+    #L = -torch.log(fn(x, **kwargs)).sum() # Negative log posterior
+    L = -fn(x, **kwargs).sum()
     E = d * torch.log(w) + L
     return E
 

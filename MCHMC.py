@@ -11,7 +11,7 @@ import integration_schemes as integ
 import functions as funct
 
 
-def MCHMC_bounces(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, metrics=False, debug=False, pbar=False):
+def MCHMC_bounces(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, metrics=False, debug=False, pbar=False, **kwargs):
     """
     This function implements the MCHMC algorithm for the q=0 case with random momentum
     bounces every K steps.
@@ -34,10 +34,6 @@ def MCHMC_bounces(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, metrics=False
 
     K = int(L // epsilon) #  steps between bounces
 
-    # idea da discutere
-    if K==0:
-        K=1
-
     # Defining tensors where to store results of evolution
     X = torch.zeros((N+1, d), device=device)
     E = torch.zeros(N+1, device=device)
@@ -48,10 +44,11 @@ def MCHMC_bounces(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, metrics=False
     # STEP 0: Intial conditions
     if fn == funct.bimodal:    
         mu = np.zeros(d)
-        mu[0] = np.random.choice(np.array([0,8]))
-        x = np.random.normal(loc=mu, scale=1, size=(d, ))
+        mu[0] = np.random.choice([0,8], p=[0.8, 0.2])
+        x = np.random.normal(loc=mu, scale=0.1, size=(d, ))
     else:
-        x = np.random.uniform(low=-10, high=10, size=(d,)) # Sample initial position x_o in R^d from prior
+        x = np.random.uniform(low=-5, high=5, size=(d,)) # Sample initial position x_o in R^d from prior
+        #print(x)
         
     x = torch.tensor(x, dtype=torch.float32, device=device)
     x.requires_grad_()
@@ -63,7 +60,7 @@ def MCHMC_bounces(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, metrics=False
     w = torch.tensor(w, requires_grad=False, dtype=torch.float32, device=device)
 
     X[0] = x.detach()
-    E[0] = utils.energy(x, w, d, fn)
+    E[0] = utils.energy(x, w, d, fn, **kwargs)
 
     if fn == funct.standard_cauchy:
         cauchy=True
@@ -86,11 +83,11 @@ def MCHMC_bounces(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, metrics=False
           u /= torch.linalg.norm(u)
 
         # Updating coordinate and momentum
-        x, u, w = int_scheme(x, u, w, epsilon, d, fn)
+        x, u, w = int_scheme(x, u, w, epsilon, d, fn, **kwargs)
 
         # Storing results
         X[n] = x.detach()
-        E[n] = utils.energy(x, w, d, fn)
+        E[n] = utils.energy(x, w, d, fn, **kwargs)
         
         if metrics:
             ESS, b_squared = utils.effective_sample_size(X, d, cauchy=cauchy, debug=debug) #compute it after determining the new points in phase space

@@ -9,22 +9,22 @@ import blackjax
 import jax
 from tqdm import tqdm 
 
-def sigma_eff(d, N, L, fn, algorithm, debug=False):
+def sigma_eff(d, N, L, fn, algorithm, debug=False, **kwargs):
     epsilon = 0.5 # initial value
     
     if algorithm == MCHMC.MCHMC_bounces:
-        X, E = MCHMC.MCHMC_bounces(d, N, L, epsilon, fn, debug=debug)
+        X, E = MCHMC.MCHMC_bounces(d, N, L, epsilon, fn, debug=debug, **kwargs)
     else:
-        X, E = MCLMC.MCLMC(d, N, L, epsilon, fn, debug=debug)
+        X, E = MCLMC.MCLMC(d, N, L, epsilon, fn, debug=debug, **kwargs)
 
     sigma_eff = torch.sqrt((X**2).var(axis=0).mean())
     return sigma_eff
 
 
-def tune_eps(d, N, L, fn, algorithm, iterations=10, debug=False):
+def tune_eps(d, N, L, fn, algorithm, iterations=10, debug=False, **kwargs):
 
     eps_values = np.zeros(iterations)
-    #sigma_effs = np.zeros(iterations)
+    sigma_effs = np.zeros(iterations)
     target = np.zeros(iterations)
     
     checkpoint(f"\nRunning {iterations} iterations of {algorithm} with {N} steps, updating epsilon")
@@ -34,24 +34,23 @@ def tune_eps(d, N, L, fn, algorithm, iterations=10, debug=False):
     for i in tqdm(range(iterations), desc="Running iterations"):
         
         if algorithm == MCHMC.MCHMC_bounces:
-            X, E = MCHMC.MCHMC_bounces(d, N, L, epsilon, fn, debug=debug)
+            X, E = MCHMC.MCHMC_bounces(d, N, L, epsilon, fn, debug=debug, **kwargs)
         else:
-            X, E = MCLMC.MCLMC(d, N, L, epsilon, fn, debug=debug)
+            X, E = MCLMC.MCLMC(d, N, L, epsilon, fn, debug=debug, **kwargs)
             
         varE = E.var()
         epsilon *= (0.0005 * d / varE)**(1/4)
         
         eps_values[i] = epsilon
 
-        #sigma_eff = torch.sqrt((X**2).var(axis=0).mean())
-        #sigma_effs[i] = sigma_eff
+        sigma_eff = torch.sqrt((X**2).var(axis=0).mean())
+        sigma_effs[i] = sigma_eff
         target[i] = varE / d
     
-    #return eps_values, sigma_effs, target
-    return eps_values, target
+    return eps_values, sigma_effs, target
 
 
-def tune_L(sigma_eff, eps_opt, d, N, fn, algorithm, iterations=10, debug=False, cauchy=False):
+def tune_L(sigma_eff, eps_opt, d, N, fn, algorithm, iterations=10, debug=False, cauchy=False, **kwargs):
 
     L_values = np.zeros(iterations)
     checkpoint(f"\nRunning {iterations} iterations of {algorithm} with {N} steps, updating L")
@@ -59,9 +58,9 @@ def tune_L(sigma_eff, eps_opt, d, N, fn, algorithm, iterations=10, debug=False, 
     for i in tqdm(range(iterations), desc="Running iterations"):   
         L = sigma_eff * np.sqrt(d)
         if algorithm == MCHMC.MCHMC_bounces:
-          X, *_ = MCHMC.MCHMC_bounces(d, N, L, eps_opt, fn, debug=debug)
+          X, *_ = MCHMC.MCHMC_bounces(d, N, L, eps_opt, fn, debug=debug, **kwargs)
         else:
-          X, *_ = MCLMC.MCLMC(d, N, L, eps_opt, fn, debug=debug)
+          X, *_ = MCLMC.MCLMC(d, N, L, eps_opt, fn, debug=debug, **kwargs)
         
         #Using the library
         Xt = np.expand_dims(X, 0) #(chain_axis, sample_axis, dim_axis)
