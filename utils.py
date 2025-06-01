@@ -27,6 +27,8 @@ def energy(x, w, d, fn, **kwargs):
     E = d * torch.log(w) + L
     return E
 
+def b2(X):
+    return 0
 
 def effective_sample_size(X, d, cauchy=False, debug=False, L_tuning=False):
     """

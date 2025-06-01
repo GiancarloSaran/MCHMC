@@ -1,6 +1,7 @@
 import torch
 import numpy as np  
 from torch.distributions.multivariate_normal import MultivariateNormal
+from torch.distributions.normal import Normal
 from utils import checkpoint, warning
 import utils
 import jax.numpy as jnp
@@ -78,9 +79,50 @@ def ill_cond_gaussian(x, k=100, **kwargs):
     return log_pdf
 
     
+def rosenbrock(x, Q=0.1):
+    device = utils.choose_device()
+    if not isinstance(x, torch.Tensor):
+        x = torch.tensor(x, dtype=torch.float32)
+    if x.dim() == 1:
+        x = x.unsqueeze(1)
+    x = x.to(device)
+    x = torch.transpose(x, 0, 1)
+    d = x.shape[1]
+    if d % 2 != 0:
+        print(f'Alert!! Rosenbrock allows even dimensionality only')
+        return None
+    idx_even = torch.arange(0, d, step=2)
+    idx_odd = torch.arange(1, d, step=2)
+    X = x[:, idx_even]  # Shape: (1, d/2)
+    Y = x[:, idx_odd]   # Shape: (1, d/2)
+    dist1 = Normal(1, 1)  # N(x|1,1)
+    dist2 = Normal(0, np.sqrt(Q))  # N(y-x^2|0, sqrt(Q))
+    log_prob_x = dist1.log_prob(X)
+    log_prob_y = dist2.log_prob(Y - X**2)
+    log_pdf = torch.sum(log_prob_x + log_prob_y)
+    return log_pdf
 
+def neals_funnel(x):
+    #Same as rosenbrock, it's sum of Gaussian logls
+    device = utils.choose_device()
+    if not isinstance(x, torch.Tensor):
+        x = torch.tensor(x, dtype=torch.float32)
+    if x.dim() == 1:
+        x = x.unsqueeze(1)
+    x = x.to(device)
+    x = torch.transpose(x, 0, 1)
+    d = x.shape[1]
+    if d < 2:
+        print(f'Alert!! No hidden variables')
+        return None
+    theta = x[0, 0]
+    z = x[:, 1:]
+    dist_theta = Normal(0, 3)
+    dist_z = Normal(0, torch.exp(theta/2))
+    log_prob_theta = dist_theta.log_prob(theta)
+    log_prob_z = dist_z.log_prob(z)
+    return log_prob_theta + log_prob_z.sum()
 
-    
 '''
 def jax_bimodal(x, w1=0.8, off=8):
     x = jnp.asarray(x, dtype=jnp.float32)

@@ -11,7 +11,7 @@ import integration_schemes as integ
 import functions as funct
 
 
-def MCHMC_bounces(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, metrics=False, debug=False, pbar=False, **kwargs):
+def MCHMC_bounces(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, x0=None, metrics=False, debug=False, pbar=False, **kwargs):
     """
     This function implements the MCHMC algorithm for the q=0 case with random momentum
     bounces every K steps.
@@ -32,7 +32,7 @@ def MCHMC_bounces(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, metrics=False
     """
     device = utils.choose_device()
 
-    K = int(L // epsilon) #  steps between bounces
+    K = max(int(L // epsilon), 1) #  steps between bounces
 
     # Defining tensors where to store results of evolution
     X = torch.zeros((N+1, d), device=device)
@@ -42,13 +42,18 @@ def MCHMC_bounces(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, metrics=False
         B_squared = torch.zeros(N+1)
 
     # STEP 0: Intial conditions
-    if fn == funct.bimodal:    
-        mu = np.zeros(d)
-        mu[0] = np.random.choice([0,8], p=[0.8, 0.2])
-        x = np.random.normal(loc=mu, scale=0.1, size=(d, ))
+    if x0 is None:
+        if fn == funct.bimodal:    
+            mu = np.zeros(d)
+            mu[0] = np.random.choice([0,8], p=[0.8, 0.2])
+            x = np.random.normal(loc=mu, scale=0.1, size=(d, ))
+        elif fn == funct.rosenbrock or fn == funct.neals_funnel:
+            x = np.zeros(d) ###### DEBUGGING PRIOR ONLY, CHANGE LATER
+        else:
+            x = np.random.uniform(low=-5, high=5, size=(d,)) # Sample initial position x_o in R^d from prior
+            #print(x)
     else:
-        x = np.random.uniform(low=-5, high=5, size=(d,)) # Sample initial position x_o in R^d from prior
-        #print(x)
+        x = x0.copy()
         
     x = torch.tensor(x, dtype=torch.float32, device=device)
     x.requires_grad_()
