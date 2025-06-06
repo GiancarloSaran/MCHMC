@@ -43,15 +43,12 @@ def MCHMC_bounces(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, x0=None, metr
 
     # STEP 0: Intial conditions
     if x0 is None:
-        if fn == funct.bimodal:    
+        if fn == funct.bimodal:
             mu = np.zeros(d)
-            mu[0] = np.random.choice([0,8], p=[0.8, 0.2])
-            x = np.random.normal(loc=mu, scale=0.1, size=(d, ))
-        elif fn == funct.rosenbrock or fn == funct.neals_funnel:
-            x = np.zeros(d) ###### DEBUGGING PRIOR ONLY, CHANGE LATER
+            mu[0] = np.random.choice([0,8], size=1, p=[0.8, 0.2])
+            x = torch.normal(mean=torch.tensor(mu, dtype=torch.float32), std=1.0)
         else:
-            x = np.random.uniform(low=-5, high=5, size=(d,)) # Sample initial position x_o in R^d from prior
-            #print(x)
+            x = np.random.standard_normal(d) ###### DEBUGGING PRIOR ONLY, CHANGE LATER
     else:
         x = x0.copy()
         
@@ -70,7 +67,7 @@ def MCHMC_bounces(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, x0=None, metr
     if fn == funct.standard_cauchy:
         cauchy=True
     
-    if metrics:
+    if metrics and cauchy:
         ESS, b_squared = utils.effective_sample_size(X, d, cauchy=cauchy)
         B_squared[0] = b_squared
 
@@ -94,7 +91,7 @@ def MCHMC_bounces(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, x0=None, metr
         X[n] = x.detach()
         E[n] = utils.energy(x, w, d, fn, **kwargs)
         
-        if metrics:
+        if metrics and cauchy:
             ESS, b_squared = utils.effective_sample_size(X, d, cauchy=cauchy, debug=debug) #compute it after determining the new points in phase space
             B_squared[n] = b_squared
             

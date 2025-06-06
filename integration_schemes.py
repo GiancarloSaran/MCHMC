@@ -57,7 +57,7 @@ def momentum_update_map(x: np.ndarray, u: np.ndarray, w: float, epsilon: float, 
     return new_x, new_u, new_w
 
 def stochastic_update_map(x, u, w, epsilon, L, d, fn, **kwargs):
-    nu = torch.sqrt((torch.e**(2*epsilon/L))-1)/d
+    nu = torch.sqrt((torch.exp(2*epsilon/L)-1)/d)
 
     # updating position
     new_x = x
