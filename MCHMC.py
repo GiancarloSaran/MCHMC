@@ -46,13 +46,14 @@ def MCHMC_bounces(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, x0=None, metr
         if fn == funct.bimodal:
             mu = np.zeros(d)
             mu[0] = np.random.choice([0,8], size=1, p=[0.8, 0.2])
-            x = torch.normal(mean=torch.tensor(mu, dtype=torch.float32), std=1.0)
+            x = torch.normal(mean=torch.tensor(mu, dtype=torch.float32, device=device), std=1.0)
         else:
             x = np.random.standard_normal(d) ###### DEBUGGING PRIOR ONLY, CHANGE LATER
     else:
         x = x0.copy()
-        
-    x = torch.tensor(x, dtype=torch.float32, device=device)
+    
+    if not isinstance(x, torch.Tensor):
+        x = torch.tensor(x, dtype=torch.float32, device=device)
     x.requires_grad_()
 
     u = torch.randn(d, device=device) # Sample initial direction of momentum u_0 from isotropic distribution in R^d

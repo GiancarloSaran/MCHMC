@@ -28,7 +28,7 @@ def energy(x, w, d, fn, **kwargs):
     E = d * torch.log(w) + L
     return E
 
-def find_ess(X, threshold=200, grad_evaluations=2, min_samples=100, pbar=True):
+def find_ess(X, threshold=200, grad_evaluations=2, min_samples=100, pbar=True, take_minimum=False):
     
     X = X.to("cpu").detach().numpy()
     low, high = min_samples, len(X)
@@ -41,7 +41,10 @@ def find_ess(X, threshold=200, grad_evaluations=2, min_samples=100, pbar=True):
             break
         mid = (low + high) // 2
         Xt = np.expand_dims(X[:mid], 0)
-        n_eff = np.array(effective_sample_size(Xt)).min()
+        if not take_minimum:
+            n_eff = np.array(effective_sample_size(Xt)).mean()
+        else:
+            n_eff = np.array(effective_sample_size(Xt)).min()
         #print(mid, n_eff)
         if threshold - 1 <= n_eff <= threshold + 1:
             best_n = mid
