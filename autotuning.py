@@ -1,12 +1,13 @@
 import torch
 import numpy as np  
-from utils import checkpoint, warning
+from utils import checkpoint, warning, choose_device
 import utils
 import MCHMC
 import MCLMC
 from blackjax.diagnostics import effective_sample_size
 import blackjax
 import jax
+from jax import default_device
 from tqdm import tqdm 
 
 def sigma_eff(d, N, L, fn, algorithm, int_scheme, debug=False, **kwargs):
@@ -64,9 +65,17 @@ def tune_L(sigma_eff, eps_opt, d, N, fn, algorithm, int_scheme, iterations=10, d
         
         #Using the library
         Xt = np.expand_dims(X, 0) #(chain_axis, sample_axis, dim_axis)
-        n_eff_values = np.array(effective_sample_size(Xt)) 
-        
+
+        ###################################################################### SOLUZIONE TEMPORANEA
+        #n_eff_values = np.array(effective_sample_size(Xt)) # NON PIU COSì
+        # Force data onto CPU
+        Xt_cpu = jax.device_put(Xt, device=jax.devices("cpu")[0])
+        # Evaluate on CPU
+        with default_device(jax.devices("cpu")[0]):
+            n_eff_values = jax.numpy.array(effective_sample_size(Xt_cpu))
+        ######################################################################
         # Computing the dechoerence scale L
+        n_eff_values = torch.tensor(n_eff_values, device=utils.choose_device())
         L = 0.4 * eps_opt * d * N / (n_eff_values.sum())
         L_values[i] = L
           
