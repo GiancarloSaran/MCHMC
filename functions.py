@@ -11,15 +11,6 @@ from scipy.stats import ortho_group
 np.random.seed(0)
 
 def standard_cauchy(x):
-    """
-    This function takes an array of d-dimensional points as input
-        x = [x_1, x_2, ..., x_d]
-
-    For each point x_i, it computes the value of the cauchy distribution as:
-        p(x_i) = ( 1/(1+x_{i,1}**2) )*( 1/(1+x_{i,2}**2) )*...*( 1/(1+x_{i,d}**2) )
-
-    The output is a tensor containing the values of the distribution for each point.
-    """
     # serve che sia tensore di torch per implementazione del gradiente
     if not isinstance(x, torch.Tensor):
         x = torch.tensor(x, dtype=torch.float32)
@@ -28,16 +19,6 @@ def standard_cauchy(x):
     return torch.prod(1 / (np.pi * (1 + x**2)), axis=1)
 
 def bimodal(x, w1=torch.tensor(0.8), sep=8):
-    '''
-    This function takes an array of d-dimensional points as input
-        x = [x_1, x_2, ..., x_d]
-
-    For each point x_i, it computes the value of the bimodal distribution as:
-        p(x_i) = w_1 * p(x_i) + w_2 * p(x_i)
-      where p(x_i) is a standard 50-dimensional normal distribution.
-
-    The output is a tensor containing the values of the distribution for each point.
-    '''
     device = utils.choose_device()
     if not isinstance(x, torch.Tensor):
         x = torch.tensor(x, dtype=torch.float32)

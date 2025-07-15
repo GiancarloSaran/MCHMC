@@ -5,9 +5,9 @@ import utils
 from utils import checkpoint, warning
 import integration_schemes as integ
 import functions as funct
+import metrics
 
-
-def MCLMC(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, x0=None, metrics=False, debug=False, pbar=False, **kwargs):
+def MCLMC(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, x0=None, debug=False, pbar=False, **kwargs):
     """
     This function implements the MCLMC algorithm for the q=0 case.
     Args:
@@ -17,21 +17,16 @@ def MCLMC(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, x0=None, metrics=Fals
         epsilon: step size
         fn: function to sample from
         int_scheme: either leapfrog or minimal_norm
-        metrics: if True returns the ESS and b_squared metrics 
     Output:
         X: positions during evolution
         E: energies during evolution
         ESS: effective sample sizes during evolution
-        b_squared: values useful for one figure of the paper
     """
 
     device = utils.choose_device()
 
     X = torch.zeros((N+1, d), device=device)
     E = torch.zeros(N+1, device=device)
-
-    if metrics:
-        B_squared = torch.zeros(N+1, device=device)
 
     # STEP 0: Intial conditions
     if x0 is None:
@@ -54,15 +49,7 @@ def MCLMC(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, x0=None, metrics=Fals
     w = torch.tensor(w, requires_grad=False, dtype=torch.float32, device=device)
 
     X[0] = x.detach()
-    E[0] = utils.energy(x, w, d, fn, **kwargs)
-
-    if fn == funct.standard_cauchy:
-        cauchy=True
-    
-    if metrics:
-        ESS, b_squared = utils.effective_sample_size(X, d, cauchy=cauchy)
-        B_squared[0] = b_squared
-
+    E[0] = utils.energy(x=x, w=w, d=d, fn=fn, **kwargs)
 
     # EVOLUTION: Algorithm implementation
     if pbar:
@@ -80,11 +67,37 @@ def MCLMC(d, N, L, epsilon, fn, int_scheme=integ.leapfrog, x0=None, metrics=Fals
         X[n] = x.detach()
         E[n] = utils.energy(x, w,d, fn, **kwargs)
         
-        if metrics:
-            ESS, b_squared = utils.effective_sample_size(X, d, cauchy=cauchy, debug=debug) #compute it after determining the new points in phase space
-            B_squared[n] = b_squared
-            
-    if metrics:
-        return X.cpu(), E.cpu(), ESS.cpu(), B_squared.cpu()
     else:
         return X.cpu(), E.cpu()
+
+
+def MCLMC_chain(n_chains, d, fn, L, eps, int_scheme, N=5000, **kwargs):
+    
+    X = []
+    ESS_mean = []
+    ESS_min = []
+    ESS_truth = []
+    
+    for i in range(n_chains):
+        Xi, *_ = MCLMC(d=d, N=N, L=L, epsilon=eps, fn=fn, int_scheme=int_scheme, pbar=True, **kwargs)
+        X.append(Xi[500:,:]) # burn-in
+        ess_mean = metrics.ESS(Xi)
+        ess_min = metrics.ESS(Xi, take_minimum=True)
+        ESS_mean.append(ess_mean)
+        ESS_min.append(ess_min)
+        
+        if fn == funct.bimodal or fn == funct.ill_cond_gaussian:
+            ess_truth = metrics.ESS_truth(Xi, fn=fn, **kwargs)
+            ESS_truth.append(ess_truth)
+
+    ESS_mean = np.array(ESS_mean)
+    ESS_min = np.array(ESS_min)
+    ESS_truth = np.array(ESS_truth)
+
+    ess_mean = np.mean(ESS_mean[ESS_mean!=None])
+    ess_min = np.mean(ESS_min[ESS_min!=None])
+    ess_truth = np.mean(ESS_truth[ESS_truth!=None])
+
+    X = torch.cat(X, dim=0)
+
+    return X, ess_mean, ess_min, ess_truth       

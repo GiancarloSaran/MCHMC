@@ -1,25 +1,18 @@
 import torch
 import numpy as np  
-from utils import checkpoint, warning, choose_device
-import utils
-import MCHMC
-import MCLMC
 from blackjax.diagnostics import effective_sample_size
 import blackjax
 import jax
 from jax import default_device
 from tqdm import tqdm 
-
-def sigma_eff(d, N, L, fn, algorithm, int_scheme, debug=False, **kwargs):
-    epsilon = 0.5 # initial value
-    
-    if algorithm == MCHMC.MCHMC_bounces:
-        X, E = MCHMC.MCHMC_bounces(d, N, L, epsilon, fn, int_scheme=int_scheme, debug=debug, **kwargs)
-    else:
-        X, E = MCLMC.MCLMC(d, N, L, epsilon, fn, debug=debug, **kwargs)
-
-    sigma_eff = torch.sqrt((X**2).var(axis=0).mean())
-    return sigma_eff
+import itertools
+import csv
+from utils import checkpoint, warning, choose_device
+import utils
+import MCHMC
+import MCLMC
+import integration_schemes as integ
+import functions as funct
 
 
 def tune_eps(d, N, L, fn, algorithm, int_scheme, iterations=10, debug=False, **kwargs):
@@ -28,7 +21,7 @@ def tune_eps(d, N, L, fn, algorithm, int_scheme, iterations=10, debug=False, **k
     sigma_effs = np.zeros(iterations)
     target = np.zeros(iterations)
     
-    checkpoint(f"\nRunning {iterations} iterations of {algorithm} with {N} steps, updating epsilon")
+    checkpoint(f"\nRunning {iterations} iterations of {algorithm.__name__} with {N} steps, updating epsilon")
 
     epsilon = 0.5 # initial value
     
@@ -47,14 +40,17 @@ def tune_eps(d, N, L, fn, algorithm, int_scheme, iterations=10, debug=False, **k
         sigma_eff = torch.sqrt((X**2).var(axis=0).mean())
         sigma_effs[i] = sigma_eff
         target[i] = varE / d
+
+    sigma_eff = np.mean(sigma_effs)
+    eps_opt = np.mean(eps_values)
     
-    return eps_values, sigma_effs, target
+    return eps_opt, sigma_eff, target
 
 
-def tune_L(sigma_eff, eps_opt, d, N, fn, algorithm, int_scheme, iterations=10, debug=False, cauchy=False, **kwargs):
+def tune_L(sigma_eff, eps_opt, d, N, fn, algorithm, int_scheme, iterations=10, debug=False, **kwargs):
 
     L_values = np.zeros(iterations)
-    checkpoint(f"\nRunning {iterations} iterations of {algorithm} with {N} steps, updating L")
+    checkpoint(f"\nRunning {iterations} iterations of {algorithm.__name__} with {N} steps, updating L")
 
     for i in tqdm(range(iterations), desc="Running iterations"):   
         L = sigma_eff * np.sqrt(d)
@@ -78,10 +74,34 @@ def tune_L(sigma_eff, eps_opt, d, N, fn, algorithm, int_scheme, iterations=10, d
         n_eff_values = torch.tensor(n_eff_values, device=utils.choose_device())
         L = 0.4 * eps_opt * d * N / (n_eff_values.sum())
         L_values[i] = L
+        
+    L_opt = np.mean(L_values)
           
-    return L_values
+    return L_opt
 
+def get_hyperparams(fn, d, L_init, output_csv, **kwargs):
 
+    algorithms = [MCHMC.MCHMC_bounces, MCLMC.MCLMC]
+    int_schemes = [integ.leapfrog, integ.minimal_norm]
+
+    with open(output_csv, mode='w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(['algorithm', 'integ_scheme', 'eps', 'L'])
+        
+        # try all possible combinations
+        for algorithm, int_scheme in itertools.product(algorithms, int_schemes):
+
+            L_arg = torch.tensor(L_init, device=utils.choose_device()) if algorithm == MCLMC.MCLMC else L_init
+            eps_opt, sigma_eff, _ = tune_eps(d=d, N=200, L=L_arg, fn=fn, algorithm=algorithm, 
+                                                     int_scheme=int_scheme, iterations=5, **kwargs)
+            
+            eps_arg = torch.tensor(eps_opt, device=utils.choose_device()) if algorithm == MCLMC.MCLMC else eps_opt
+            L_opt = tune_L(sigma_eff=sigma_eff, eps_opt=eps_arg, d=d, N=200, fn=fn, 
+                                  algorithm=algorithm, int_scheme=int_scheme, iterations=5, **kwargs)
+
+            writer.writerow([algorithm.__name__, int_scheme.__name__, eps_opt, L_opt])
+
+'''
 def blackjax_tuner(logdensity_fn, initial_position, key, desired_energy_variance= 5e-4, num_steps=350):
     """
     Tune (epsilon, L) using the autotuner from the Google blackjax package, for consistency checks.
@@ -119,3 +139,4 @@ def blackjax_tuner(logdensity_fn, initial_position, key, desired_energy_variance
     )
 
     return blackjax_mclmc_sampler_params
+'''
